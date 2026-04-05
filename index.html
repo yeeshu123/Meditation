@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a0a">
+
     <title>Vipassana Minimal</title>
     <style>
         :root {
@@ -23,11 +29,12 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 100vh;
+            /* 100dvh is crucial for mobile: it accounts for the dynamic address bar */
+            min-height: 100dvh; 
             -webkit-font-smoothing: antialiased;
+            overflow: hidden; /* Disables all page scrolling/bouncing */
         }
 
-        /* --- Minimalist UI Elements --- */
         .container {
             width: 100%;
             max-width: 360px;
@@ -37,10 +44,10 @@
             gap: 2rem;
             opacity: 1;
             transition: opacity 0.4s ease;
+            position: relative;
         }
 
         .hidden { display: none !important; }
-        .fade-out { opacity: 0; pointer-events: none; }
 
         h1 {
             font-size: 0.9rem;
@@ -142,6 +149,7 @@
             cursor: pointer;
             transition: opacity 0.2s;
             margin-top: 1rem;
+            width: 100%;
         }
         .btn-primary:active { opacity: 0.7; }
 
@@ -168,19 +176,21 @@
             background: none;
             border: none;
             color: var(--text-muted);
-            font-size: 1.2rem;
+            font-size: 1.5rem;
             cursor: pointer;
             position: absolute;
-            bottom: 30px;
-            right: 30px;
+            /* Moved to top right to avoid layout conflicts */
+            top: 25px;
+            right: 25px;
             transition: color 0.2s;
+            z-index: 10;
         }
         .icon-btn:hover { color: var(--text-main); }
         
         #stats-modal {
             position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(10, 10, 10, 0.95);
+            top: 0; left: 0; width: 100%; height: 100dvh;
+            background: rgba(10, 10, 10, 0.98);
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -192,8 +202,10 @@
 </head>
 <body>
 
+    <button class="icon-btn" id="btn-show-stats" onclick="toggleStats(true)">⊞</button>
+
     <div class="container" id="setup-view">
-        <h1>Focus</h1>
+        <h1 style="margin-top: 10px;">Focus</h1>
         
         <div class="mode-selector">
             <button class="mode-btn active" id="btn-normal" onclick="setMode('normal')">Normal</button>
@@ -205,8 +217,7 @@
             <input type="number" id="val-duration" value="20" min="1">
         </div>
         
-        <div class="subtext hidden" id="progressive-info">
-            </div>
+        <div class="subtext hidden" id="progressive-info"></div>
 
         <div class="control-group" style="border: none;">
             <label>Interval Bells</label>
@@ -229,19 +240,40 @@
         <button class="btn-primary" style="background: var(--surface); color: var(--text-main);" onclick="stopMeditation()">End Early</button>
     </div>
 
-    <button class="icon-btn" id="btn-show-stats" onclick="toggleStats(true)">⊞</button>
-
     <div id="stats-modal" class="hidden">
         <h1 style="color: var(--text-main);">Your Journey</h1>
-        <div class="stats-data" id="stats-content">
-            </div>
-        <button class="btn-primary" style="background: var(--surface); color: var(--text-main);" onclick="toggleStats(false)">Close</button>
+        <div class="stats-data" id="stats-content"></div>
+        <button class="btn-primary" style="background: var(--surface); color: var(--text-main); width: auto; padding: 12px 30px;" onclick="toggleStats(false)">Close</button>
     </div>
 
 <script>
     let audioCtx = null;
     let visualTimerInterval = null;
     let currentMode = 'normal';
+
+    // --- Fullscreen API Management ---
+    function enterFullscreen() {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+            elem.requestFullscreen().catch(err => console.log("Fullscreen ignored"));
+        } else if (elem.webkitRequestFullscreen) { /* Safari */
+            elem.webkitRequestFullscreen();
+        } else if (elem.msRequestFullscreen) { /* IE11 */
+            elem.msRequestFullscreen();
+        }
+    }
+
+    function exitFullscreen() {
+        if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+        }
+    }
 
     // --- State & Stats Management ---
     function loadStats() {
@@ -291,13 +323,11 @@
         if (currentMode !== 'progressive') return;
         const { stats } = loadStats();
         const base = parseInt(document.getElementById('val-duration').value) || 20;
-        // Progression Algo: Add 1 min for every 3 streak days
         const bonus = Math.floor(stats.streak / 3);
         const actualTime = base + bonus;
         document.getElementById('progressive-info').innerText = `Today's target: ${actualTime} minutes (Streak bonus: +${bonus}m)`;
     }
 
-    // Update info if user changes base value manually
     document.getElementById('val-duration').addEventListener('input', updateProgressiveInfo);
 
     function toggleIntervalInputs() {
@@ -323,24 +353,18 @@
 
     // --- Refined Audio Synthesizer ---
     function initAudio() {
-        // Re-instantiate context on every start to ensure clean slate
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         audioCtx = new AudioContext();
     }
 
     function scheduleBell(time) {
         if (!audioCtx) return;
-        
         const masterGain = audioCtx.createGain();
-        
-        // 3 Oscillators for a rich, soft, non-clipping bell (C4, C5, G5)
         const freqs = [261.63, 523.25, 783.99]; 
         
-        // LIMITER: Keep max volume very low (15%) to prevent speaker clipping
         masterGain.gain.setValueAtTime(0, time);
-        masterGain.gain.linearRampToValueAtTime(0.15, time + 0.05); // Soft attack
-        masterGain.gain.exponentialRampToValueAtTime(0.001, time + 6.0); // Long smooth decay
-
+        masterGain.gain.linearRampToValueAtTime(0.15, time + 0.05);
+        masterGain.gain.exponentialRampToValueAtTime(0.001, time + 6.0);
         masterGain.connect(audioCtx.destination);
 
         freqs.forEach(freq => {
@@ -361,12 +385,12 @@
 
     // --- Core Engine ---
     function startMeditation() {
+        enterFullscreen(); // Trigger Fullscreen Mode
         initAudio();
         
         let totalMinutes = parseInt(document.getElementById('val-duration').value);
         if (!totalMinutes) return;
 
-        // Apply Progressive Algo if active
         if (currentMode === 'progressive') {
             const { stats } = loadStats();
             totalMinutes += Math.floor(stats.streak / 3);
@@ -378,10 +402,8 @@
         
         const now = audioCtx.currentTime;
 
-        // 1. Start Bells
         scheduleThrice(now);
 
-        // 2. Interval Bells (Hardware locked)
         if (useInterval && intervalSeconds) {
             let nextRingTime = intervalSeconds;
             while (nextRingTime < totalSeconds) {
@@ -390,10 +412,8 @@
             }
         }
 
-        // 3. End Bells
         scheduleThrice(now + totalSeconds);
 
-        // View Transition
         document.getElementById('setup-view').classList.add('hidden');
         document.getElementById('btn-show-stats').classList.add('hidden');
         document.getElementById('active-view').classList.remove('hidden');
@@ -427,7 +447,7 @@
 
     function stopMeditation() {
         if (audioCtx) {
-            audioCtx.close(); // Kills future audio events
+            audioCtx.close();
             audioCtx = null;
         }
         clearInterval(visualTimerInterval);
@@ -437,11 +457,11 @@
     function completeSession() {
         clearInterval(visualTimerInterval);
         saveSession();
-        // Wait 9 seconds for the final 3 bells to finish resonating before resetting UI
         setTimeout(() => resetUI(), 9000); 
     }
 
     function resetUI() {
+        exitFullscreen(); // Drop out of fullscreen
         document.getElementById('setup-view').classList.remove('hidden');
         document.getElementById('btn-show-stats').classList.remove('hidden');
         document.getElementById('active-view').classList.add('hidden');
