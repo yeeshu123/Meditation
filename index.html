@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vipassana Minimal</title>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --surface: #1a1a1a;
+            --text-main: #ededed;
+            --text-muted: #555555;
+            --accent: #888888;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* --- Minimalist UI Elements --- */
+        .container {
+            width: 100%;
+            max-width: 360px;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            opacity: 1;
+            transition: opacity 0.4s ease;
+        }
+
+        .hidden { display: none !important; }
+        .fade-out { opacity: 0; pointer-events: none; }
+
+        h1 {
+            font-size: 0.9rem;
+            letter-spacing: 0.4em;
+            text-transform: uppercase;
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            font-weight: 400;
+        }
+
+        /* Mode Selector */
+        .mode-selector {
+            display: flex;
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 4px;
+        }
+        .mode-btn {
+            flex: 1;
+            padding: 10px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .mode-btn.active {
+            background: var(--bg);
+            color: var(--text-main);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+
+        /* Inputs */
+        .control-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #222;
+            padding-bottom: 15px;
+        }
+        .control-group label { font-size: 1rem; color: var(--text-main); }
+        .control-group input[type="number"] {
+            background: transparent;
+            border: none;
+            color: var(--text-main);
+            font-size: 1.2rem;
+            width: 50px;
+            text-align: right;
+            outline: none;
+        }
+
+        /* Toggle Switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--surface);
+            transition: .3s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: var(--text-muted);
+            transition: .3s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: var(--text-main); }
+        input:checked + .slider:before {
+            transform: translateX(20px);
+            background-color: var(--bg);
+        }
+
+        /* Action Buttons */
+        .btn-primary {
+            background: var(--text-main);
+            color: var(--bg);
+            border: none;
+            padding: 16px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            margin-top: 1rem;
+        }
+        .btn-primary:active { opacity: 0.7; }
+
+        /* Timer Display */
+        #active-view { text-align: center; }
+        #timer-display {
+            font-size: 5rem;
+            font-weight: 200;
+            font-variant-numeric: tabular-nums;
+            margin: 4rem 0;
+            color: var(--text-main);
+        }
+
+        /* Subtext */
+        .subtext {
+            font-size: 0.8rem;
+            color: var(--accent);
+            text-align: center;
+            margin-top: -10px;
+        }
+
+        /* Stats Modal */
+        .icon-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            cursor: pointer;
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            transition: color 0.2s;
+        }
+        .icon-btn:hover { color: var(--text-main); }
+        
+        #stats-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 10, 10, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        .stats-data { text-align: left; line-height: 2; margin-bottom: 2rem; }
+    </style>
+</head>
+<body>
+
+    <div class="container" id="setup-view">
+        <h1>Focus</h1>
+        
+        <div class="mode-selector">
+            <button class="mode-btn active" id="btn-normal" onclick="setMode('normal')">Normal</button>
+            <button class="mode-btn" id="btn-progressive" onclick="setMode('progressive')">Progressive</button>
+        </div>
+
+        <div class="control-group">
+            <label id="lbl-duration">Duration (min)</label>
+            <input type="number" id="val-duration" value="20" min="1">
+        </div>
+        
+        <div class="subtext hidden" id="progressive-info">
+            </div>
+
+        <div class="control-group" style="border: none;">
+            <label>Interval Bells</label>
+            <label class="switch">
+                <input type="checkbox" id="toggle-interval" onchange="toggleIntervalInputs()">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div class="control-group hidden" id="wrap-interval">
+            <label>Ring every (min)</label>
+            <input type="number" id="val-interval" value="5" min="1">
+        </div>
+
+        <button class="btn-primary" onclick="startMeditation()">Begin Session</button>
+    </div>
+
+    <div class="container hidden" id="active-view">
+        <div id="timer-display">00:00</div>
+        <button class="btn-primary" style="background: var(--surface); color: var(--text-main);" onclick="stopMeditation()">End Early</button>
+    </div>
+
+    <button class="icon-btn" id="btn-show-stats" onclick="toggleStats(true)">⊞</button>
+
+    <div id="stats-modal" class="hidden">
+        <h1 style="color: var(--text-main);">Your Journey</h1>
+        <div class="stats-data" id="stats-content">
+            </div>
+        <button class="btn-primary" style="background: var(--surface); color: var(--text-main);" onclick="toggleStats(false)">Close</button>
+    </div>
+
+<script>
+    let audioCtx = null;
+    let visualTimerInterval = null;
+    let currentMode = 'normal';
+
+    // --- State & Stats Management ---
+    function loadStats() {
+        const today = new Date().toDateString();
+        let stats = JSON.parse(localStorage.getItem('vipassanaStats')) || { streak: 0, lastDate: null, totalSessions: 0 };
+        
+        if (stats.lastDate) {
+            const last = new Date(stats.lastDate);
+            const now = new Date(today);
+            const diffDays = Math.floor((now - last) / (1000 * 60 * 60 * 24));
+            if (diffDays > 1) stats.streak = 0;
+        }
+        return { stats, today };
+    }
+
+    function saveSession() {
+        const { stats, today } = loadStats();
+        if (stats.lastDate !== today) {
+            stats.streak += 1;
+            stats.lastDate = today;
+        }
+        stats.totalSessions += 1;
+        localStorage.setItem('vipassanaStats', JSON.stringify(stats));
+        updateProgressiveInfo();
+    }
+
+    // --- UI Controllers ---
+    function setMode(mode) {
+        currentMode = mode;
+        document.getElementById('btn-normal').classList.toggle('active', mode === 'normal');
+        document.getElementById('btn-progressive').classList.toggle('active', mode === 'progressive');
+        
+        const label = document.getElementById('lbl-duration');
+        const info = document.getElementById('progressive-info');
+        
+        if (mode === 'progressive') {
+            label.innerText = 'Base Duration (min)';
+            info.classList.remove('hidden');
+            updateProgressiveInfo();
+        } else {
+            label.innerText = 'Duration (min)';
+            info.classList.add('hidden');
+        }
+    }
+
+    function updateProgressiveInfo() {
+        if (currentMode !== 'progressive') return;
+        const { stats } = loadStats();
+        const base = parseInt(document.getElementById('val-duration').value) || 20;
+        // Progression Algo: Add 1 min for every 3 streak days
+        const bonus = Math.floor(stats.streak / 3);
+        const actualTime = base + bonus;
+        document.getElementById('progressive-info').innerText = `Today's target: ${actualTime} minutes (Streak bonus: +${bonus}m)`;
+    }
+
+    // Update info if user changes base value manually
+    document.getElementById('val-duration').addEventListener('input', updateProgressiveInfo);
+
+    function toggleIntervalInputs() {
+        const isChecked = document.getElementById('toggle-interval').checked;
+        const wrap = document.getElementById('wrap-interval');
+        if (isChecked) wrap.classList.remove('hidden');
+        else wrap.classList.add('hidden');
+    }
+
+    function toggleStats(show) {
+        const modal = document.getElementById('stats-modal');
+        if (show) {
+            const { stats } = loadStats();
+            document.getElementById('stats-content').innerHTML = `
+                Current Streak: <strong>${stats.streak} days</strong><br>
+                Total Sessions: <strong>${stats.totalSessions}</strong>
+            `;
+            modal.classList.remove('hidden');
+        } else {
+            modal.classList.add('hidden');
+        }
+    }
+
+    // --- Refined Audio Synthesizer ---
+    function initAudio() {
+        // Re-instantiate context on every start to ensure clean slate
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+    }
+
+    function scheduleBell(time) {
+        if (!audioCtx) return;
+        
+        const masterGain = audioCtx.createGain();
+        
+        // 3 Oscillators for a rich, soft, non-clipping bell (C4, C5, G5)
+        const freqs = [261.63, 523.25, 783.99]; 
+        
+        // LIMITER: Keep max volume very low (15%) to prevent speaker clipping
+        masterGain.gain.setValueAtTime(0, time);
+        masterGain.gain.linearRampToValueAtTime(0.15, time + 0.05); // Soft attack
+        masterGain.gain.exponentialRampToValueAtTime(0.001, time + 6.0); // Long smooth decay
+
+        masterGain.connect(audioCtx.destination);
+
+        freqs.forEach(freq => {
+            const osc = audioCtx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, time);
+            osc.connect(masterGain);
+            osc.start(time);
+            osc.stop(time + 6.5);
+        });
+    }
+
+    function scheduleThrice(startTime) {
+        scheduleBell(startTime);
+        scheduleBell(startTime + 3.0); 
+        scheduleBell(startTime + 6.0);
+    }
+
+    // --- Core Engine ---
+    function startMeditation() {
+        initAudio();
+        
+        let totalMinutes = parseInt(document.getElementById('val-duration').value);
+        if (!totalMinutes) return;
+
+        // Apply Progressive Algo if active
+        if (currentMode === 'progressive') {
+            const { stats } = loadStats();
+            totalMinutes += Math.floor(stats.streak / 3);
+        }
+
+        const totalSeconds = totalMinutes * 60;
+        const useInterval = document.getElementById('toggle-interval').checked;
+        const intervalSeconds = parseInt(document.getElementById('val-interval').value) * 60;
+        
+        const now = audioCtx.currentTime;
+
+        // 1. Start Bells
+        scheduleThrice(now);
+
+        // 2. Interval Bells (Hardware locked)
+        if (useInterval && intervalSeconds) {
+            let nextRingTime = intervalSeconds;
+            while (nextRingTime < totalSeconds) {
+                scheduleBell(now + nextRingTime);
+                nextRingTime += intervalSeconds;
+            }
+        }
+
+        // 3. End Bells
+        scheduleThrice(now + totalSeconds);
+
+        // View Transition
+        document.getElementById('setup-view').classList.add('hidden');
+        document.getElementById('btn-show-stats').classList.add('hidden');
+        document.getElementById('active-view').classList.remove('hidden');
+
+        startVisualTimer(totalSeconds);
+    }
+
+    function startVisualTimer(totalSeconds) {
+        let remaining = totalSeconds;
+        updateTimerDisplay(remaining);
+        
+        const expectedEndTime = Date.now() + (totalSeconds * 1000);
+
+        visualTimerInterval = setInterval(() => {
+            remaining = Math.round((expectedEndTime - Date.now()) / 1000);
+            
+            if (remaining <= 0) {
+                updateTimerDisplay(0);
+                completeSession();
+            } else {
+                updateTimerDisplay(remaining);
+            }
+        }, 1000);
+    }
+
+    function updateTimerDisplay(seconds) {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = (seconds % 60).toString().padStart(2, '0');
+        document.getElementById('timer-display').innerText = `${m}:${s}`;
+    }
+
+    function stopMeditation() {
+        if (audioCtx) {
+            audioCtx.close(); // Kills future audio events
+            audioCtx = null;
+        }
+        clearInterval(visualTimerInterval);
+        resetUI();
+    }
+
+    function completeSession() {
+        clearInterval(visualTimerInterval);
+        saveSession();
+        // Wait 9 seconds for the final 3 bells to finish resonating before resetting UI
+        setTimeout(() => resetUI(), 9000); 
+    }
+
+    function resetUI() {
+        document.getElementById('setup-view').classList.remove('hidden');
+        document.getElementById('btn-show-stats').classList.remove('hidden');
+        document.getElementById('active-view').classList.add('hidden');
+        updateProgressiveInfo();
+    }
+</script>
+</body>
+</html>
